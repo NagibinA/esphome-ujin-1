@@ -16,7 +16,6 @@
 
 #include "esphome/components/binary_sensor/automation.h"
 #include "esphome/components/binary_sensor/binary_sensor.h"
-#include "esphome/components/template/binary_sensor/template_binary_sensor.h"
 #include "esphome/components/esp32_touch/esp32_touch.h"
 #include "esphome/components/light/automation.h"
 #include "esphome/components/script/script.h"
@@ -40,26 +39,23 @@ class TouchDimmer {
   std::string name;
   light::LightState *lightMain;
   binary_sensor::BinarySensor *touchSensor;
-  binary_sensor::BinarySensor *dimmerSensor;
-  
+
   script::SingleScript<> *scriptDimStart;
   script::SingleScript<> *scriptDimStop;
+
   float dimming_dir = 0;
 
  public:
   TouchDimmer(const std::string &name,
               light::LightState *lightMain,
-              binary_sensor::BinarySensor *touchSensor,
-              binary_sensor::BinarySensor *dimmerSensor)
-      : name(name), lightMain(lightMain), touchSensor(touchSensor), dimmerSensor(dimmerSensor)
+              binary_sensor::BinarySensor *touchSensor)
+      : name(name), lightMain(lightMain), touchSensor(touchSensor)
   {
     ESP_LOGD(LOGTAG,
-             "Creating name=%s, light=%s, touch=%s, binary=%s",
+             "Creating name=%s, light=%s, touch=%s",
              name.c_str(),
              lightMain->get_name().c_str(),
-             touchSensor->get_name().c_str(),
-             dimmerSensor->get_name().c_str());
-
+             touchSensor->get_name().c_str());
 
     createDimStartScript();
     createDimStopScript();
@@ -70,11 +66,16 @@ class TouchDimmer {
   // Dimming start script, to be called from the 'on_press' handler of the touch pad:
   void createDimStartScript()
   {
+    // Construct the script first
+    scriptDimStart = new script::SingleScript<>();
+    scriptDimStart->set_name(LOG_STR("touch_dimmer_start"));
+    // Убрана регистрация компонента: App.register_component(scriptDimStart);
+
     // Wait to see if the 'touch' lasts for long enough:
     auto *startDelayAction = new DelayAction<>();
     startDelayAction->set_delay(dimStartDelayMs + 50);  // Add a little margin.
     App.register_component(startDelayAction);
-    
+
     // Toggle the dimming direction:
     LambdaAction<> *toggleDimDirLambda = new LambdaAction<>([&]() -> void {
       const float cur_bright = this->lightMain->current_values.get_brightness();
@@ -105,19 +106,15 @@ class TouchDimmer {
       const float new_bright = clamp(cur_bright + step, 0.0f, 1.0f);
 
       {
-        bool dim_on = this->dimmerSensor->state;
-          if (dim_on) {
-            auto call = this->lightMain->make_call();
-            call.set_brightness(new_bright);
-            call.set_transition_length(dimPeriodMs / 2.0f);
-            call.set_state(new_bright > 0);
-            call.perform();
-        }
+        auto call = this->lightMain->make_call();
+        call.set_brightness(new_bright);
+        call.set_transition_length(dimPeriodMs / 2.0f);
+        call.set_state(new_bright > 0);
+        call.perform();
       }
 
       if (new_bright <= 0.0f || new_bright >= 0.999f) {
         this->scriptDimStop->execute();
-
       }
     });
 
@@ -126,22 +123,19 @@ class TouchDimmer {
     auto *whileAction = new WhileAction<>(whileCondition);
     whileAction->add_then({dimDelayAction, dimStepLambda});
 
-    // Construct the script:
-    scriptDimStart = new script::SingleScript<>();
-    scriptDimStart->set_name(name + "__script_dimming_start");
-
     auto *dimStartAutom = new Automation<>(scriptDimStart);
     dimStartAutom->add_actions({startDelayAction, toggleDimDirLambda, whileAction});
   }
 
   void createDimStopScript()
   {
+    // Construct the script first
+    scriptDimStop = new script::SingleScript<>();
+    scriptDimStop->set_name(LOG_STR("touch_dimmer_stop"));
+    // Убрана регистрация компонента: App.register_component(scriptDimStop);
+
     // Stop the dimming script:
     auto *scriptStopAction = new ScriptStopAction(scriptDimStart);
-
-    // Construct the script:
-    scriptDimStop = new script::SingleScript<>();
-    scriptDimStop->set_name(name + "__script_dimming_stop");
 
     auto *dimStopAutom = new Automation<>(scriptDimStop);
     dimStopAutom->add_actions({scriptStopAction});
@@ -163,7 +157,6 @@ class TouchDimmer {
     auto *lightToggleAction = new light::ToggleAction<>(lightMain);
     LambdaAction<> *setDimDirectionLambda = new LambdaAction<>([&]() -> void {
       this->dimming_dir = lightMain->current_values.get_brightness() > 0.5f ? 1 : -1;
-
     });
 
     auto *clickAutomation = new Automation<>(clickTrigger);
