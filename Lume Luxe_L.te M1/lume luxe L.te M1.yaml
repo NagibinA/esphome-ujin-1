@@ -56,9 +56,11 @@ packages:
     vars:
       one_butt: GPIO15
       two_butt: GPIO2
-      touch_threshold: 1150 # 1000 
+      touch_threshold_1: 1000 #1150
+      touch_threshold_2: 1000 #1150
       delta_threshold: 5
       setup_threshold: false #true
+      delta_brigh: 10%
 
 # Двойной выключатель для lume Luxe L.te M1
   zero_dimm: !include 
